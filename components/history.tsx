@@ -70,7 +70,7 @@ export function History() {
         month: "long",
         day: "numeric",
       })
-    } catch (e) {
+    } catch {
       return dateString
     }
   }

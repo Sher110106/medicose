@@ -46,7 +46,7 @@ export function ResultsDisplay({ result, onSave, onCancel }: ResultsDisplayProps
         month: "long",
         day: "numeric",
       })
-    } catch (e) {
+    } catch {
       return dateString
     }
   }

@@ -1,12 +1,12 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useRef } from "react"
-import { Camera, Upload, RefreshCw } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { Camera, Upload, RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
+import { processImageWithNebius } from "@/lib/utils"
 
 interface CameraUploadProps {
   onImageProcessed: (result: { productName: string; expiryDate: string }) => void
@@ -15,49 +15,126 @@ interface CameraUploadProps {
 export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
   const [isCapturing, setIsCapturing] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isCameraLoading, setIsCameraLoading] = useState(false)
+  const [showVideo, setShowVideo] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const { toast } = useToast()
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      })
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setIsCapturing(true)
+  // Clean up camera on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
       }
-    } catch (error) {
+    }
+  }, [])
+
+  const startCamera = async () => {
+    console.log('Starting camera initialization...');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.error('Browser API check failed: mediaDevices not supported');
       toast({
         title: "Camera Error",
-        description: "Could not access camera. Please check permissions.",
+        description: "Your browser doesn't support camera access",
         variant: "destructive",
       })
+      return
+    }
+
+    setIsCameraLoading(true)
+    setShowVideo(true)  // Show the video element first
+
+    // Small delay to ensure video element is mounted
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    try {
+      console.log('Requesting camera stream...');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } }
+      })
+      console.log('Camera stream obtained:', stream.getVideoTracks()[0].getSettings());
+      
+      streamRef.current = stream
+      
+      if (!videoRef.current) {
+        console.error('Video element reference not found');
+        throw new Error('Video element not initialized');
+      }
+
+      console.log('Setting video source...');
+      videoRef.current.srcObject = stream
+      
+      // Wait for video to be ready
+      await new Promise((resolve, reject) => {
+        if (!videoRef.current) return reject('No video element');
+        
+        videoRef.current.onloadedmetadata = () => {
+          console.log('Video metadata loaded, attempting playback...');
+          videoRef.current?.play()
+            .then(() => {
+              console.log('Video playback started successfully');
+              setIsCapturing(true)
+              setIsCameraLoading(false)
+              resolve(true)
+            })
+            .catch(err => {
+              console.error("Error playing video:", err)
+              reject(err)
+            })
+        }
+      })
+    } catch (err) {
+      console.error("Camera initialization error:", err);
+      setShowVideo(false)
+      toast({
+        title: "Camera Error",
+        description: err instanceof DOMException && err.name === "NotAllowedError" 
+          ? "Camera access denied. Please grant permission." 
+          : `Could not access camera: ${err instanceof Error ? err.message : String(err)}`,
+        variant: "destructive",
+      })
+      setIsCameraLoading(false)
+      stopCamera()
     }
   }
 
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
-      tracks.forEach((track) => track.stop())
-      videoRef.current.srcObject = null
-      setIsCapturing(false)
+    console.log('Stopping camera...');
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        console.log(`Stopping track: ${track.kind}`);
+        track.stop()
+      });
+      streamRef.current = null
     }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    
+    setIsCapturing(false)
+    setShowVideo(false)
+    console.log('Camera stopped');
   }
 
   const captureImage = () => {
-    if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext("2d")
-      if (context) {
-        canvasRef.current.width = videoRef.current.videoWidth
-        canvasRef.current.height = videoRef.current.videoHeight
-        context.drawImage(videoRef.current, 0, 0)
+    if (!videoRef.current || !canvasRef.current) return
 
-        processImage(canvasRef.current.toDataURL("image/png"))
-      }
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    
+    // Ensure dimensions are set correctly
+    canvas.width = video.videoWidth || video.clientWidth
+    canvas.height = video.videoHeight || video.clientHeight
+    
+    const context = canvas.getContext("2d")
+    if (context) {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      processImage(canvas.toDataURL("image/jpeg", 0.9)) // Better compression
     }
   }
 
@@ -74,21 +151,34 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
     }
   }
 
-  const processImage = (imageData: string) => {
+  const processImage = async (imageData: string) => {
     setIsProcessing(true)
 
-    // Simulate processing with a timeout
-    // In a real app, this would call an API to process the image
-    setTimeout(() => {
+    try {
+      const result = await processImageWithNebius(imageData)
+
+      if (result.success && result.productName && result.expiryDate) {
+        onImageProcessed({
+          productName: result.productName,
+          expiryDate: result.expiryDate,
+        })
+        toast({
+          title: "Success",
+          description: "Image processed successfully",
+        })
+      } else {
+        throw new Error(result.error || "Failed to process image")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to process image",
+        variant: "destructive",
+      })
+    } finally {
       setIsProcessing(false)
       stopCamera()
-
-      // Mock result - in a real app this would come from the API
-      onImageProcessed({
-        productName: "Sample Medicine",
-        expiryDate: "2025-12-31",
-      })
-    }, 2000)
+    }
   }
 
   return (
@@ -96,26 +186,42 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
       <CardContent className="p-6">
         <div className="flex flex-col items-center space-y-6">
           <div
-            className="relative w-full max-w-md aspect-[4/3] bg-muted rounded-lg overflow-hidden border-2 border-primary"
+            className="relative w-full max-w-md aspect-[4/3] bg-black rounded-lg overflow-hidden border-2 border-primary"
             aria-live="polite"
           >
-            {isCapturing ? (
+            {showVideo ? (
               <>
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
+                  muted
+                  controls={false}
+                  webkit-playsinline="true"
                   className="absolute inset-0 w-full h-full object-cover"
                   aria-label="Camera viewfinder"
                 />
-                <div className="absolute inset-0 border-4 border-dashed border-primary-foreground opacity-50 m-4 pointer-events-none"></div>
+                {isCapturing && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-end pb-6">
+                    <Button 
+                      className="bg-white hover:bg-gray-100 text-black font-bold py-3 px-6 rounded-full shadow-lg z-10"
+                      onClick={captureImage} 
+                      disabled={isProcessing}
+                    >
+                      <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
+                      Take Photo
+                    </Button>
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex items-center justify-center w-full h-full">
-                <p className="text-xl text-center px-4">
-                  {isProcessing
-                    ? "Processing image..."
-                    : "Capture or upload an image of a product to read its expiry date"}
+                <p className="text-xl text-center px-4 text-white">
+                  {isCameraLoading
+                    ? "Initializing camera..."
+                    : isProcessing
+                      ? "Processing image..."
+                      : "Capture or upload an image of a product to read its expiry date"}
                 </p>
               </div>
             )}
@@ -131,17 +237,28 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md">
             {!isCapturing ? (
-              <Button size="lg" className="h-16 text-lg" onClick={startCamera} disabled={isProcessing}>
+              <Button 
+                size="lg" 
+                className="h-16 text-lg" 
+                onClick={startCamera} 
+                disabled={isProcessing || isCameraLoading}
+              >
                 <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
-                Open Camera
+                {isCameraLoading ? "Starting Camera..." : "Open Camera"}
               </Button>
             ) : (
-              <Button size="lg" className="h-16 text-lg" onClick={captureImage} disabled={isProcessing}>
-                <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
-                Capture Image
+              <Button
+                variant="outline"
+                size="lg"
+                className="h-16 text-lg"
+                onClick={stopCamera}
+                disabled={isProcessing}
+              >
+                <X className="w-6 h-6 mr-2" aria-hidden="true" />
+                Cancel
               </Button>
             )}
-
+            
             <Button
               variant="outline"
               size="lg"
@@ -152,6 +269,7 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
               <Upload className="w-6 h-6 mr-2" aria-hidden="true" />
               Upload Image
             </Button>
+            
             <input
               ref={fileInputRef}
               type="file"
@@ -161,15 +279,8 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
               aria-label="Upload product image"
             />
           </div>
-
-          {isCapturing && (
-            <Button variant="outline" size="lg" className="h-12 text-lg" onClick={stopCamera}>
-              Cancel
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>
   )
 }
-
