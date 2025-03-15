@@ -1,4 +1,7 @@
-import { useRef, useEffect, useState } from 'react';
+"use client"
+
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { useSpeech } from '@/hooks/use-speech';
 
 interface CameraProps {
   onCapture: (imageData: string) => void;
@@ -8,20 +11,25 @@ export function Camera({ onCapture }: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const { speak } = useSpeech();
+
+  const announceStatus = useCallback((message: string) => {
+    speak(message);
+  }, [speak]);
 
   useEffect(() => {
-    console.log('Camera component mounted, initializing...');
     const currentVideo = videoRef.current;
     
     const startCamera = async () => {
-      console.log('Checking browser compatibility...');
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('Browser does not support camera access');
+        const error = 'Your browser does not support camera access';
+        setCameraError(error);
+        announceStatus(error);
         setIsLoading(false);
         return;
       }
 
-      console.log('Browser supports camera access, requesting permissions...');
       try {
         const constraints = {
           video: { 
@@ -30,95 +38,109 @@ export function Camera({ onCapture }: CameraProps) {
             height: { ideal: 720 }
           }
         };
-        console.log('Requesting stream with constraints:', constraints);
         
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        console.log('Camera stream obtained successfully:', stream.getVideoTracks()[0].getSettings());
         
         if (currentVideo) {
-          console.log('Setting video source object...');
           currentVideo.srcObject = stream;
+          currentVideo.style.display = 'block'; // Ensure video is visible
+          currentVideo.style.transform = 'scaleX(-1)'; // Mirror the video if using front camera
           
           currentVideo.onloadedmetadata = () => {
-            console.log('Video metadata loaded, attempting to play...');
             currentVideo?.play()
               .then(() => {
-                console.log('Video playing successfully');
                 setIsStreaming(true);
                 setIsLoading(false);
+                announceStatus('Camera is ready. Press Space or Enter to take a photo.');
               })
               .catch(err => {
-                console.error('Error playing video:', err);
+                const error = 'Unable to start video stream';
+                setCameraError(error);
+                announceStatus(error);
                 setIsLoading(false);
               });
           };
-
-          currentVideo.onerror = (err) => {
-            console.error('Video element error:', err);
-          };
-        } else {
-          console.error('Video element reference not found');
-          setIsLoading(false);
         }
       } catch (err) {
-        console.error('Error accessing camera:', err);
-        if (err instanceof DOMException) {
-          console.log('DOMException details:', {
-            name: err.name,
-            message: err.message,
-            code: err.code
-          });
-        }
+        const error = 'Unable to access camera. Please ensure camera permissions are granted.';
+        setCameraError(error);
+        announceStatus(error);
         setIsLoading(false);
       }
     };
 
+    announceStatus('Initializing camera. Please wait.');
     startCamera();
 
     return () => {
-      console.log('Cleaning up camera resources...');
       if (currentVideo?.srcObject) {
         const stream = currentVideo.srcObject as MediaStream;
-        stream.getTracks().forEach(track => {
-          console.log(`Stopping track: ${track.kind}`);
-          track.stop();
-        });
+        stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [announceStatus]);
 
-  const captureImage = () => {
-    console.log('Attempting to capture image...');
+  const captureImage = useCallback(() => {
     if (!videoRef.current || !isStreaming) {
-      console.log('Cannot capture: video not ready or not streaming');
+      announceStatus('Camera is not ready yet');
       return;
     }
 
+    announceStatus('Taking photo');
     const video = videoRef.current;
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth || video.clientWidth;
     canvas.height = video.videoHeight || video.clientHeight;
     
-    console.log(`Canvas dimensions set to: ${canvas.width}x${canvas.height}`);
-    
     const context = canvas.getContext('2d');
     if (context) {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = canvas.toDataURL('image/jpeg', 0.9);
-      console.log('Image captured successfully');
+      announceStatus('Photo captured successfully');
       onCapture(imageData);
     } else {
-      console.error('Failed to get canvas context');
+      announceStatus('Failed to capture photo');
     }
-  };
+  }, [isStreaming, onCapture, announceStatus]);
+
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.code === 'Space' || e.code === 'Enter') && isStreaming) {
+        e.preventDefault();
+        captureImage();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isStreaming, captureImage]);
 
   return (
-    <div className="relative w-full h-[60vh] max-w-md mx-auto bg-black">
+    <div 
+      className="relative w-full h-[60vh] max-w-md mx-auto bg-black"
+      role="region"
+      aria-label="Camera viewfinder"
+    >
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center text-white">
+        <div 
+          className="absolute inset-0 flex items-center justify-center text-white"
+          role="status"
+          aria-live="polite"
+        >
           <p>Initializing camera...</p>
         </div>
       )}
+
+      {cameraError && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center text-white bg-red-900 p-4"
+          role="alert"
+          aria-live="assertive"
+        >
+          <p>{cameraError}</p>
+        </div>
+      )}
+
       <video
         ref={videoRef}
         autoPlay
@@ -126,20 +148,34 @@ export function Camera({ onCapture }: CameraProps) {
         muted
         controls={false}
         webkit-playsinline="true"
-        className="absolute inset-0 w-full h-full object-cover"
-        aria-label="Camera viewfinder"
+        className="absolute inset-0 w-full h-full object-cover bg-black"
+        style={{ display: 'block' }}
+        aria-label="Live camera feed"
       />
+
       {isStreaming && (
         <div className="absolute inset-x-0 bottom-4 flex justify-center">
           <button
             onClick={captureImage}
-            className="bg-white rounded-full p-4 shadow-lg hover:bg-gray-100 transition-colors"
-            aria-label="Take photo"
+            className="bg-white rounded-full p-4 shadow-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+            aria-label="Take photo. Press Space or Enter"
+            role="button"
           >
-            <div className="w-12 h-12 rounded-full border-4 border-gray-800" />
+            <div 
+              className="w-12 h-12 rounded-full border-4 border-gray-800"
+              aria-hidden="true"
+            />
           </button>
         </div>
       )}
+
+      <div 
+        className="sr-only"
+        aria-live="polite"
+        role="status"
+      >
+        {isStreaming ? 'Camera is active and ready to take photos' : 'Camera is initializing'}
+      </div>
     </div>
   );
 }
