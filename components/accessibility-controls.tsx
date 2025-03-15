@@ -1,39 +1,85 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ChevronDown, ChevronUp, Sun, Moon, Volume2, VolumeX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
+import { Card } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
+import { useElementSpeech } from "@/hooks/useElementSpeech"
+
+interface SpeechSettings {
+  enabled: boolean;
+  rate: number;
+  pitch: number;
+  volume: number;
+  delay: number;
+  selectedVoice: string;
+}
 
 interface AccessibilityControlsProps {
-  onFontSizeChange: (size: string) => void
-  onContrastToggle: (enabled: boolean) => void
-  highContrast: boolean
+  onFontSizeChange: (size: string) => void;
+  onContrastToggle: (enabled: boolean) => void;
+  highContrast: boolean;
+  speechSettings: SpeechSettings;
+  onSpeechSettingsChange: (settings: SpeechSettings) => void;
 }
 
 export function AccessibilityControls({
   onFontSizeChange,
   onContrastToggle,
   highContrast,
+  speechSettings,
+  onSpeechSettingsChange,
 }: AccessibilityControlsProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [fontSize, setFontSize] = useState(2) // 1=small, 2=medium, 3=large
-  const [voiceGuidance, setVoiceGuidance] = useState(false)
-  const [volume, setVolume] = useState([50])
+  const { speakText, isSpeechSupported, hasUserInteracted } = useElementSpeech();
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [fontSize, setFontSize] = useState(2); // 1=small, 2=medium, 3=large
+
+  useEffect(() => {
+    if (window.speechSynthesis) {
+      const loadVoices = () => {
+        const availableVoices = window.speechSynthesis.getVoices();
+        setVoices(availableVoices);
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   const handleFontSizeChange = (newSize: number) => {
-    setFontSize(newSize)
-    const sizeClass = newSize === 1 ? "text-sm" : newSize === 3 ? "text-xl" : "text-base"
-    onFontSizeChange(sizeClass)
-  }
+    setFontSize(newSize);
+    const sizeClass = newSize === 1 ? "text-sm" : newSize === 3 ? "text-xl" : "text-base";
+    onFontSizeChange(sizeClass);
+  };
 
-  const toggleVoiceGuidance = () => {
-    setVoiceGuidance(!voiceGuidance)
-    // In a real app, this would enable/disable voice guidance
-  }
+  const updateSpeechSetting = <K extends keyof SpeechSettings>(
+    key: K,
+    value: SpeechSettings[K]
+  ) => {
+    onSpeechSettingsChange({
+      ...speechSettings,
+      [key]: value,
+    });
+  };
+
+  const testVoice = () => {
+    if (speechSettings.enabled && isSpeechSupported && hasUserInteracted) {
+      const utterance = new SpeechSynthesisUtterance("This is a test of the voice settings");
+      utterance.rate = speechSettings.rate;
+      utterance.pitch = speechSettings.pitch;
+      utterance.volume = speechSettings.volume;
+      if (speechSettings.selectedVoice) {
+        const selectedVoice = voices.find((v) => v.name === speechSettings.selectedVoice);
+        if (selectedVoice) utterance.voice = selectedVoice;
+      }
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg overflow-hidden">
@@ -110,41 +156,107 @@ export function AccessibilityControls({
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Label htmlFor="voice-guidance" className="text-base">
-                Voice Guidance
+              <Label htmlFor="voice-enabled" className="text-base">
+                Voice Assistance
               </Label>
-              {voiceGuidance ? (
+              {speechSettings.enabled ? (
                 <Volume2 className="h-5 w-5" aria-hidden="true" />
               ) : (
                 <VolumeX className="h-5 w-5" aria-hidden="true" />
               )}
             </div>
             <Switch
-              id="voice-guidance"
-              checked={voiceGuidance}
-              onCheckedChange={toggleVoiceGuidance}
-              aria-label="Toggle voice guidance"
+              id="voice-enabled"
+              checked={speechSettings.enabled}
+              onCheckedChange={(checked) => updateSpeechSetting("enabled", checked)}
+              aria-label="Toggle voice assistance"
             />
           </div>
 
-          {voiceGuidance && (
-            <div className="space-y-2">
-              <Label htmlFor="volume-slider" className="text-base">
-                Voice Volume
-              </Label>
-              <Slider
-                id="volume-slider"
-                value={volume}
-                onValueChange={setVolume}
-                max={100}
-                step={1}
-                aria-label="Adjust voice guidance volume"
-              />
+          {speechSettings.enabled && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label>Speech Rate</Label>
+                <Slider
+                  value={[speechSettings.rate]}
+                  min={0.5}
+                  max={2}
+                  step={0.1}
+                  onValueChange={([value]) => updateSpeechSetting("rate", value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Pitch</Label>
+                <Slider
+                  value={[speechSettings.pitch]}
+                  min={0.5}
+                  max={2}
+                  step={0.1}
+                  onValueChange={([value]) => updateSpeechSetting("pitch", value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Volume</Label>
+                <Slider
+                  value={[speechSettings.volume]}
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  onValueChange={([value]) => updateSpeechSetting("volume", value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Hover Delay (ms)</Label>
+                <Slider
+                  value={[speechSettings.delay]}
+                  min={0}
+                  max={500}
+                  step={50}
+                  onValueChange={([value]) => updateSpeechSetting("delay", value)}
+                />
+              </div>
+
+              {voices.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="voice-select">Voice</Label>
+                  <Select
+                    value={speechSettings.selectedVoice}
+                    onValueChange={(value) => updateSpeechSetting("selectedVoice", value)}
+                  >
+                    <SelectValue placeholder="Select a voice" id="voice-select" />
+                    <SelectContent>
+                      <SelectItem value="">System Default</SelectItem>
+                      {voices.map((voice) => (
+                        <SelectItem key={voice.name} value={voice.name}>
+                          {voice.name} ({voice.lang})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <Button 
+                onClick={testVoice} 
+                disabled={!speechSettings.enabled || !isSpeechSupported || !hasUserInteracted}
+                className="w-full"
+              >
+                Test Voice Settings
+              </Button>
+
+              {!hasUserInteracted && (
+                <p className="text-sm text-yellow-600">
+                  Please interact with the page (click/tap anywhere) to enable voice features.
+                </p>
+              )}
             </div>
           )}
         </div>
       </CollapsibleContent>
     </Collapsible>
-  )
+  );
 }
 

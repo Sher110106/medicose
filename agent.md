@@ -1,150 +1,71 @@
-You're right to question whether storing photos is necessary for your Expiry Date Reader application. Here's how to handle the photo processing with Nebius API without permanent storage:
+# Voice Assistance Implementation Prompt
 
-## Photo Handling Strategy for Expiry Date Reader
+## Objective
+Create a comprehensive voice assistance system for our application that reads out elements when users hover over them, with proper accessibility settings and smooth transitions between elements.
 
-### Temporary Processing Approach
+## Requirements
 
-1. **Capture photo in the browser**
-   - Use the WebRTC API (getUserMedia) to access the camera
-   - Capture the image as a Blob or base64 encoded string
+### Accessibility Settings Panel
+1. Create a dedicated accessibility settings panel where users can:
+   - Toggle voice assistance on/off
+   - Adjust speech rate, pitch, and volume
+   - Set delay before speech begins on hover
+   - Choose preferred voice (if multiple are available)
 
-2. **Process locally before API call**
-   - Convert to appropriate format (JPEG/PNG)
-   - Optionally compress/resize to reduce upload size
-   - No need to persist the full image to permanent storage
+### Voice Assistance Behavior
+1. When enabled, the system should:
+   - Read text content when a user hovers over an element
+   - Immediately stop current speech and begin reading new content when user moves to another element
+   - Prioritize accessibility attributes (aria-label, alt text) over raw text content
+   - Provide appropriate feedback for interactive elements (buttons, links, inputs)
 
-3. **Call Nebius API directly**
-   - Send the image data directly to Nebius API for processing
-   - You can either:
-     - Convert image to base64 and include in the request body
-     - Use FormData to send as multipart/form-data
+### Technical Implementation
+1. Utilize the provided `useElementSpeech` hook as the foundation
+2. Ensure speech synthesis works across browsers with proper fallbacks
+3. Handle component mounting/unmounting gracefully to prevent speech overlap
+4. Implement proper user interaction detection to comply with browser autoplay policies
+5. Add appropriate ARIA attributes to enhance accessibility
 
-4. **Handle the response**
-   - Process the expiration date information returned by Nebius
-   - Store only the extracted text data (product name, expiration date) in your database
-   - Discard the image data after processing
+### User Experience Considerations
+1. Add visual indicators when voice assistance is active
+2. Provide clear instructions for enabling voice assistance
+3. Ensure minimal delay between hovering and speech beginning
+4. Handle focus states for keyboard navigation
+5. Implement proper error handling with user-friendly messages
 
-### Implementation Example
+## Implementation Guidelines
 
-```javascript
-// Capture image from camera
-async function captureImage() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  const videoElement = document.createElement('video');
-  videoElement.srcObject = stream;
-  await videoElement.play();
-  
-  // Create canvas to capture frame
-  const canvas = document.createElement('canvas');
-  canvas.width = videoElement.videoWidth;
-  canvas.height = videoElement.videoHeight;
-  canvas.getContext('2d').drawImage(videoElement, 0, 0);
-  
-  // Stop camera stream
-  stream.getTracks().forEach(track => track.stop());
-  
-  // Get image data as blob
-  return new Promise(resolve => {
-    canvas.toBlob(blob => {
-      resolve(blob);
-    }, 'image/jpeg', 0.8); // 80% quality JPEG
-  });
-}
+1. Use the existing `useElementSpeech` hook and extend it with the following:
+   - Settings persistence (localStorage)
+   - Voice selection capability
+   - Improved element text extraction logic
 
-// Process with Nebius API
-async function processWithNebius(imageBlob) {
-  // Create FormData
-  const formData = new FormData();
-  formData.append('image', imageBlob);
-  
-  // Add any other required parameters
-  formData.append('model', 'Qwen/Qwen2-VL-7B-Instruct');
-  
-  // Call Nebius API
-  const response = await fetch('https://api.nebius.ai/v1/vision/analyze', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${NEBIUS_API_KEY}`
-    },
-    body: formData
-  });
-  
-  return await response.json();
-}
+2. Create a `SpeakableElement` wrapper component that:
+   - Can be easily applied to any element requiring voice assistance
+   - Handles hover/focus events automatically
+   - Supports custom text override
+   - Includes disable option for specific elements
 
-// Main function to handle the whole process
-async function scanExpirationDate() {
-  try {
-    // Show loading indicator
-    showLoading(true);
-    
-    // Capture image
-    const imageBlob = await captureImage();
-    
-    // Process with Nebius
-    const result = await processWithNebius(imageBlob);
-    
-    // Extract expiration date from result
-    const expirationDate = extractExpirationDate(result);
-    
-    // Save to database (only the text data)
-    await saveToDatabase({
-      productName: document.getElementById('productName').value,
-      expirationDate: expirationDate,
-      dateScanned: new Date()
-    });
-    
-    // Display result to user
-    displayResult(expirationDate);
-    
-  } catch (error) {
-    handleError(error);
-  } finally {
-    showLoading(false);
-  }
-}
-```
+3. Develop an AccessibilityPanel component that:
+   - Provides intuitive controls for all speech settings
+   - Includes a test area for users to verify settings
+   - Saves preferences for returning users
 
-### Nebius API Integration Notes
+4. Add proper logging for debugging and analytics:
+   - Track usage patterns
+   - Identify potential issues
+   - Monitor performance metrics
 
-For the Nebius vision model integration specifically, you'll need to:
-
-1. Use the `NebiusMultiModal` class from the SDK or make direct HTTP requests
-2. Format your prompt to specifically ask for expiration date extraction
-3. Process the returned text to isolate and format the date information
-
-If you're using the Python SDK on your backend:
-
-```python
-from llama_index.multi_modal_llms.nebius import NebiusMultiModal
-import base64
-
-def process_image(image_data):
-    # Convert base64 image to file or URL if needed
-    # (Implementation depends on how you're receiving the image)
-    
-    # Initialize the model
-    mm_llm = NebiusMultiModal(
-        model="Qwen/Qwen2-VL-7B-Instruct",
-        api_key=NEBIUS_API_KEY,
-        max_new_tokens=300,
-    )
-    
-    # Create prompt for expiration date extraction
-    prompt = "Look at this product packaging and extract the expiration date. Return only the date in YYYY-MM-DD format."
-    
-    # Process image
-    response = mm_llm.complete(
-        prompt=prompt,
-        image_documents=[image_data]  # Format depends on SDK requirements
-    )
-    
-    return response
-```
-
-This approach gives you the benefits of Nebius's vision processing capabilities without the overhead and privacy concerns of storing images permanently.
+## Testing Requirements
+1. use this in the entire frontend and make everything accessible
 
 
+## Accessibility Compliance
+Ensure the implementation meets WCAG 2.1 AA standards, particularly:
+- 1.3.1 Info and Relationships
+- 2.1.1 Keyboard
+- 2.5.3 Label in Name
+- 4.1.2 Name, Role, Value
 
----
-Answer from Perplexity: https://www.perplexity.ai/search/visionary-transform-how-we-see-hnPR_LlxS8GfbsEVc0MpUw?utm_source=copy_output
+This voice assistance system should seamlessly integrate with our existing application while providing valuable accessibility features for all users.
+

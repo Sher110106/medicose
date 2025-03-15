@@ -1,16 +1,13 @@
 "use client"
-
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Header } from "@/components/header"
 import { CameraUpload } from "@/components/camera-upload"
 import { ResultsDisplay } from "@/components/results-display"
 import { History } from "@/components/history"
-import { AccessibilityControls } from "@/components/accessibility-controls"
+import { SpeakableElement } from "@/components/speakable-element"
 
 export default function Home() {
-  const [fontSizeClass, setFontSizeClass] = useState("text-base")
-  const [highContrast, setHighContrast] = useState(false)
   const [scanResult, setScanResult] = useState<{
     productName: string
     expiryDate: string
@@ -21,23 +18,21 @@ export default function Home() {
   }
 
   return (
-    <main className={`min-h-screen ${fontSizeClass} ${highContrast ? "high-contrast" : ""}`}>
+    <main className="min-h-screen">
       <Header />
       <div className="container px-4 py-6 mx-auto max-w-4xl">
-        <AccessibilityControls
-          onFontSizeChange={setFontSizeClass}
-          onContrastToggle={setHighContrast}
-          highContrast={highContrast}
-        />
-
         <Tabs defaultValue="scan" className="mt-6">
           <TabsList className="grid w-full grid-cols-2 h-14">
-            <TabsTrigger value="scan" className="text-lg py-4">
-              Scan Product
-            </TabsTrigger>
-            <TabsTrigger value="history" className="text-lg py-4">
-              History
-            </TabsTrigger>
+            <SpeakableElement text="Scan Product tab">
+              <TabsTrigger value="scan" className="text-lg py-4">
+                Scan Product
+              </TabsTrigger>
+            </SpeakableElement>
+            <SpeakableElement text="View scan history tab">
+              <TabsTrigger value="history" className="text-lg py-4">
+                History
+              </TabsTrigger>
+            </SpeakableElement>
           </TabsList>
           <TabsContent
             value="scan"

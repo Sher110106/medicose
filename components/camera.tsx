@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
+import { SpeakableElement } from "@/components/speakable-element";
 
 interface CameraProps {
   onCapture: (imageData: string) => void;
@@ -113,9 +114,17 @@ export function Camera({ onCapture }: CameraProps) {
   };
 
   return (
-    <div className="relative w-full h-[60vh] max-w-md mx-auto bg-black">
+    <div 
+      className="relative w-full h-[60vh] max-w-md mx-auto bg-black"
+      role="region"
+      aria-label="Camera interface"
+    >
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center text-white">
+        <div 
+          className="absolute inset-0 flex items-center justify-center text-white"
+          role="status"
+          aria-live="polite"
+        >
           <p>Initializing camera...</p>
         </div>
       )}
@@ -128,16 +137,23 @@ export function Camera({ onCapture }: CameraProps) {
         webkit-playsinline="true"
         className="absolute inset-0 w-full h-full object-cover"
         aria-label="Camera viewfinder"
+        role="application"
       />
       {isStreaming && (
         <div className="absolute inset-x-0 bottom-4 flex justify-center">
-          <button
-            onClick={captureImage}
-            className="bg-white rounded-full p-4 shadow-lg hover:bg-gray-100 transition-colors"
-            aria-label="Take photo"
-          >
-            <div className="w-12 h-12 rounded-full border-4 border-gray-800" />
-          </button>
+          <SpeakableElement text="Take a photo of the product">
+            <button
+              onClick={captureImage}
+              className="bg-white rounded-full p-4 shadow-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              aria-label="Take photo"
+              role="button"
+            >
+              <div 
+                className="w-12 h-12 rounded-full border-4 border-gray-800"
+                aria-hidden="true"
+              />
+            </button>
+          </SpeakableElement>
         </div>
       )}
     </div>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { processImageWithNebius } from "@/lib/utils"
+import { SpeakableElement } from "@/components/speakable-element"
 
 interface CameraUploadProps {
   onImageProcessed: (result: { productName: string; expiryDate: string }) => void
@@ -203,14 +204,16 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
                 />
                 {isCapturing && (
                   <div className="absolute inset-0 flex flex-col items-center justify-end pb-6">
-                    <Button 
-                      className="bg-white hover:bg-gray-100 text-black font-bold py-3 px-6 rounded-full shadow-lg z-10"
-                      onClick={captureImage} 
-                      disabled={isProcessing}
-                    >
-                      <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
-                      Take Photo
-                    </Button>
+                    <SpeakableElement text="Take a photo of the product">
+                      <Button 
+                        className="bg-white hover:bg-gray-100 text-black font-bold py-3 px-6 rounded-full shadow-lg z-10"
+                        onClick={captureImage} 
+                        disabled={isProcessing}
+                      >
+                        <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
+                        Take Photo
+                      </Button>
+                    </SpeakableElement>
                   </div>
                 )}
               </>
@@ -237,38 +240,44 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md">
             {!isCapturing ? (
-              <Button 
-                size="lg" 
-                className="h-16 text-lg" 
-                onClick={startCamera} 
-                disabled={isProcessing || isCameraLoading}
-              >
-                <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
-                {isCameraLoading ? "Starting Camera..." : "Open Camera"}
-              </Button>
+              <SpeakableElement text="Open camera to take a photo">
+                <Button 
+                  size="lg" 
+                  className="h-16 text-lg" 
+                  onClick={startCamera} 
+                  disabled={isProcessing || isCameraLoading}
+                >
+                  <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
+                  {isCameraLoading ? "Starting Camera..." : "Open Camera"}
+                </Button>
+              </SpeakableElement>
             ) : (
+              <SpeakableElement text="Cancel photo capture">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-16 text-lg"
+                  onClick={stopCamera}
+                  disabled={isProcessing}
+                >
+                  <X className="w-6 h-6 mr-2" aria-hidden="true" />
+                  Cancel
+                </Button>
+              </SpeakableElement>
+            )}
+            
+            <SpeakableElement text="Upload an existing product image">
               <Button
                 variant="outline"
                 size="lg"
                 className="h-16 text-lg"
-                onClick={stopCamera}
-                disabled={isProcessing}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing || isCapturing}
               >
-                <X className="w-6 h-6 mr-2" aria-hidden="true" />
-                Cancel
+                <Upload className="w-6 h-6 mr-2" aria-hidden="true" />
+                Upload Image
               </Button>
-            )}
-            
-            <Button
-              variant="outline"
-              size="lg"
-              className="h-16 text-lg"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessing || isCapturing}
-            >
-              <Upload className="w-6 h-6 mr-2" aria-hidden="true" />
-              Upload Image
-            </Button>
+            </SpeakableElement>
             
             <input
               ref={fileInputRef}
