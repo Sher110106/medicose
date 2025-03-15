@@ -1,12 +1,14 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Camera, Upload, RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
+import { useSpeech } from "@/hooks/use-speech"
 import { processImageWithNebius } from "@/lib/utils"
+import { SpeakableElement } from "./SpeakableElement"
 
 interface CameraUploadProps {
   onImageProcessed: (result: { productName: string; expiryDate: string }) => void
@@ -22,8 +24,12 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const { toast } = useToast()
+  const { speak } = useSpeech()
 
-  // Clean up camera on unmount
+  const announceStatus = useCallback((message: string) => {
+    speak(message)
+  }, [speak])
+
   useEffect(() => {
     return () => {
       if (streamRef.current) {
@@ -34,81 +40,75 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
   }, [])
 
   const startCamera = async () => {
-    console.log('Starting camera initialization...');
+    announceStatus('Starting camera. Please wait.')
+    
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      console.error('Browser API check failed: mediaDevices not supported');
+      const error = 'Your browser does not support camera access'
       toast({
         title: "Camera Error",
-        description: "Your browser doesn't support camera access",
+        description: error,
         variant: "destructive",
       })
+      announceStatus(error)
       return
     }
 
     setIsCameraLoading(true)
-    setShowVideo(true)  // Show the video element first
-
-    // Small delay to ensure video element is mounted
+    setShowVideo(true)
     await new Promise(resolve => setTimeout(resolve, 100))
 
     try {
-      console.log('Requesting camera stream...');
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } }
+        video: { 
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
       })
-      console.log('Camera stream obtained:', stream.getVideoTracks()[0].getSettings());
       
       streamRef.current = stream
       
       if (!videoRef.current) {
-        console.error('Video element reference not found');
-        throw new Error('Video element not initialized');
+        throw new Error('Video element not initialized')
       }
-
-      console.log('Setting video source...');
-      videoRef.current.srcObject = stream
       
-      // Wait for video to be ready
+      videoRef.current.srcObject = stream
+      videoRef.current.style.display = 'block'
+      
       await new Promise((resolve, reject) => {
-        if (!videoRef.current) return reject('No video element');
+        if (!videoRef.current) return reject('No video element')
         
         videoRef.current.onloadedmetadata = () => {
-          console.log('Video metadata loaded, attempting playback...');
           videoRef.current?.play()
             .then(() => {
-              console.log('Video playback started successfully');
               setIsCapturing(true)
               setIsCameraLoading(false)
+              announceStatus('Camera is ready. Press Space or Enter to take a photo.')
               resolve(true)
             })
-            .catch(err => {
-              console.error("Error playing video:", err)
-              reject(err)
-            })
+            .catch(err => reject(err))
         }
       })
     } catch (err) {
-      console.error("Camera initialization error:", err);
       setShowVideo(false)
+      const error = err instanceof DOMException && err.name === "NotAllowedError"
+        ? "Camera access denied. Please grant permission."
+        : `Could not access camera: ${err instanceof Error ? err.message : String(err)}`
+      
       toast({
         title: "Camera Error",
-        description: err instanceof DOMException && err.name === "NotAllowedError" 
-          ? "Camera access denied. Please grant permission." 
-          : `Could not access camera: ${err instanceof Error ? err.message : String(err)}`,
+        description: error,
         variant: "destructive",
       })
+      announceStatus(error)
       setIsCameraLoading(false)
       stopCamera()
     }
   }
 
-  const stopCamera = () => {
-    console.log('Stopping camera...');
+  const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        console.log(`Stopping track: ${track.kind}`);
-        track.stop()
-      });
+      streamRef.current.getTracks().forEach(track => track.stop())
       streamRef.current = null
     }
     
@@ -118,29 +118,30 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
     
     setIsCapturing(false)
     setShowVideo(false)
-    console.log('Camera stopped');
-  }
+    announceStatus('Camera stopped')
+  }, [announceStatus])
 
-  const captureImage = () => {
+  const captureImage = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return
-
+    
+    announceStatus('Taking photo')
     const video = videoRef.current
     const canvas = canvasRef.current
     
-    // Ensure dimensions are set correctly
     canvas.width = video.videoWidth || video.clientWidth
     canvas.height = video.videoHeight || video.clientHeight
     
     const context = canvas.getContext("2d")
     if (context) {
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
-      processImage(canvas.toDataURL("image/jpeg", 0.9)) // Better compression
+      processImage(canvas.toDataURL("image/jpeg", 0.9))
     }
-  }
+  }, [announceStatus])
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      announceStatus('Processing uploaded image')
       const reader = new FileReader()
       reader.onload = (e) => {
         if (e.target?.result) {
@@ -149,19 +150,20 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
       }
       reader.readAsDataURL(file)
     }
-  }
+  }, [announceStatus])
 
   const processImage = async (imageData: string) => {
     setIsProcessing(true)
-
+    announceStatus('Processing image. Please wait.')
+    
     try {
       const result = await processImageWithNebius(imageData)
-
       if (result.success && result.productName && result.expiryDate) {
         onImageProcessed({
           productName: result.productName,
           expiryDate: result.expiryDate,
         })
+        announceStatus('Image processed successfully')
         toast({
           title: "Success",
           description: "Image processed successfully",
@@ -170,9 +172,11 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
         throw new Error(result.error || "Failed to process image")
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to process image"
+      announceStatus('Error: ' + errorMessage)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to process image",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -181,94 +185,138 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
     }
   }
 
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (isCapturing && !isProcessing && (e.code === 'Space' || e.code === 'Enter')) {
+        e.preventDefault()
+        captureImage()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [isCapturing, isProcessing, captureImage])
+
   return (
     <Card className="border-2">
       <CardContent className="p-6">
-        <div className="flex flex-col items-center space-y-6">
-          <div
-            className="relative w-full max-w-md aspect-[4/3] bg-black rounded-lg overflow-hidden border-2 border-primary"
-            aria-live="polite"
-          >
-            {showVideo ? (
-              <>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  controls={false}
-                  webkit-playsinline="true"
-                  className="absolute inset-0 w-full h-full object-cover"
-                  aria-label="Camera viewfinder"
-                />
-                {isCapturing && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-end pb-6">
-                    <Button 
-                      className="bg-white hover:bg-gray-100 text-black font-bold py-3 px-6 rounded-full shadow-lg z-10"
-                      onClick={captureImage} 
-                      disabled={isProcessing}
-                    >
-                      <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
-                      Take Photo
-                    </Button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex items-center justify-center w-full h-full">
-                <p className="text-xl text-center px-4 text-white">
-                  {isCameraLoading
-                    ? "Initializing camera..."
-                    : isProcessing
-                      ? "Processing image..."
-                      : "Capture or upload an image of a product to read its expiry date"}
-                </p>
-              </div>
-            )}
-            <canvas ref={canvasRef} className="hidden" />
-          </div>
+        <div 
+          className="flex flex-col items-center space-y-6"
+          role="region"
+          aria-label="Image capture section"
+        >
+          <SpeakableElement text="Camera viewfinder area. When camera is active, this will show the live camera feed.">
+            <div
+              className="relative w-full max-w-md aspect-[4/3] bg-black rounded-lg overflow-hidden border-2 border-primary"
+              role="region"
+              aria-label="Camera viewfinder"
+            >
+              {showVideo ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    controls={false}
+                    webkit-playsinline="true"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    style={{ display: 'block' }}
+                    aria-label="Live camera feed"
+                  />
+                  {isCapturing && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-end pb-6">
+                      <SpeakableElement text="Take photo button. Captures the current camera view. You can also press Space or Enter to take a photo.">
+                        <Button 
+                          className="bg-white hover:bg-gray-100 text-black font-bold py-3 px-6 rounded-full shadow-lg z-10"
+                          onClick={captureImage} 
+                          disabled={isProcessing}
+                          aria-label="Take photo. Press Space or Enter"
+                        >
+                          <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
+                          Take Photo
+                        </Button>
+                      </SpeakableElement>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div 
+                  className="flex items-center justify-center w-full h-full"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="text-xl text-center px-4 text-white">
+                    {isCameraLoading
+                      ? "Initializing camera..."
+                      : isProcessing
+                        ? "Processing image..."
+                        : "Capture or upload an image of a product to read its expiry date"}
+                  </p>
+                </div>
+              )}
+              <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
+            </div>
+          </SpeakableElement>
 
           {isProcessing && (
-            <div className="flex items-center justify-center gap-2">
-              <RefreshCw className="w-6 h-6 animate-spin" />
+            <div 
+              className="flex items-center justify-center gap-2"
+              role="status"
+              aria-live="polite"
+            >
+              <RefreshCw className="w-6 h-6 animate-spin" aria-hidden="true" />
               <span className="text-lg">Processing image...</span>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md">
+          <div 
+            className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md"
+            role="group"
+            aria-label="Image capture controls"
+          >
             {!isCapturing ? (
-              <Button 
-                size="lg" 
-                className="h-16 text-lg" 
-                onClick={startCamera} 
-                disabled={isProcessing || isCameraLoading}
-              >
-                <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
-                {isCameraLoading ? "Starting Camera..." : "Open Camera"}
-              </Button>
+              <SpeakableElement text="Open Camera button. Activates your device camera to take a photo of a medicine product.">
+                <Button 
+                  size="lg" 
+                  className="h-16 text-lg" 
+                  onClick={startCamera} 
+                  disabled={isProcessing || isCameraLoading}
+                  aria-label={isCameraLoading ? "Starting Camera..." : "Open Camera"}
+                >
+                  <Camera className="w-6 h-6 mr-2" aria-hidden="true" />
+                  {isCameraLoading ? "Starting Camera..." : "Open Camera"}
+                </Button>
+              </SpeakableElement>
             ) : (
+              <SpeakableElement text="Cancel button. Stops the camera and returns to the initial screen.">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-16 text-lg"
+                  onClick={stopCamera}
+                  disabled={isProcessing}
+                  aria-label="Stop camera"
+                >
+                  <X className="w-6 h-6 mr-2" aria-hidden="true" />
+                  Cancel
+                </Button>
+              </SpeakableElement>
+            )}
+            
+            <SpeakableElement text="Upload Image button. Opens file picker to select a product photo from your device.">
               <Button
                 variant="outline"
                 size="lg"
                 className="h-16 text-lg"
-                onClick={stopCamera}
-                disabled={isProcessing}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing || isCapturing}
+                aria-label="Upload product image"
               >
-                <X className="w-6 h-6 mr-2" aria-hidden="true" />
-                Cancel
+                <Upload className="w-6 h-6 mr-2" aria-hidden="true" />
+                Upload Image
               </Button>
-            )}
-            
-            <Button
-              variant="outline"
-              size="lg"
-              className="h-16 text-lg"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessing || isCapturing}
-            >
-              <Upload className="w-6 h-6 mr-2" aria-hidden="true" />
-              Upload Image
-            </Button>
+            </SpeakableElement>
             
             <input
               ref={fileInputRef}
@@ -276,7 +324,8 @@ export function CameraUpload({ onImageProcessed }: CameraUploadProps) {
               accept="image/*"
               className="hidden"
               onChange={handleFileUpload}
-              aria-label="Upload product image"
+              aria-label="File input for uploading product image"
+              tabIndex={-1}
             />
           </div>
         </div>
