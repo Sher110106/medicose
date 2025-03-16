@@ -6,11 +6,55 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-type ProcessImageResult = {
-  success: boolean
-  productName?: string
-  expiryDate?: string
-  error?: string
+// Types for medicine information
+export interface MedicineInformation {
+  basic_information: {
+    medicine_name?: string;
+    manufacturer?: string;
+    batch_lot_number?: string;
+    manufacturing_date?: string;
+    expiry_date?: string;
+    retail_price_mrp?: string;
+    barcode_id_numbers?: string;
+  };
+  composition: {
+    active_ingredients?: string;
+    inactive_ingredients_excipients?: string;
+  };
+  usage_information: {
+    indications?: string;
+    benefits_summary?: string;
+    dosage_instructions?: string;
+    route_of_administration?: string;
+    frequency_and_duration?: string;
+    storage_instructions?: string;
+    additional_information?: string;
+  };
+  clinical_information: {
+    contraindications?: string;
+    side_effects_adverse_reactions?: string;
+    drug_interactions?: string;
+    warnings_and_precautions?: string;
+    special_populations?: string;
+    precautions?: string;
+  };
+  other_details: {
+    regulatory_information?: string;
+    prescription_status?: string;
+    additional_information?: string;
+  };
+}
+
+export type ProcessImageResult = {
+  success: boolean;
+  productName?: string;
+  expiryDate?: string;
+  expired?: boolean;
+  error?: string;
+  noText?: boolean;
+  message?: string;
+  detailedInfo?: MedicineInformation;
+  rawText?: string;
 }
 
 export async function processImageWithNebius(imageData: string): Promise<ProcessImageResult> {

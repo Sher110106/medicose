@@ -7,6 +7,7 @@ interface SpeakableElementProps {
   text?: string;
   disabled?: boolean;
   className?: string;
+  isInteractive?: boolean;
 }
 
 export function SpeakableElement({ 
@@ -14,6 +15,7 @@ export function SpeakableElement({
   text, 
   disabled = false,
   className = '',
+  isInteractive = false,
 }: SpeakableElementProps) {
   const settings = useContext(SpeechContext);
   const { speakOnHover, resetSpeech } = useElementSpeech();
@@ -86,6 +88,13 @@ export function SpeakableElement({
     resetSpeech();
   }, [settings.enabled, disabled, resetSpeech]);
 
+  // Determine appropriate ARIA role based on content type
+  const getAriaRole = () => {
+    if (!settings.enabled) return undefined;
+    if (isInteractive) return "button";
+    return undefined; // Let the inherent role of the child element take precedence
+  };
+
   return (
     <div 
       className={className}
@@ -93,8 +102,8 @@ export function SpeakableElement({
       onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      role={settings.enabled ? "button" : "none"}
-      tabIndex={settings.enabled ? 0 : undefined}
+      role={getAriaRole()}
+      tabIndex={settings.enabled && (isInteractive || text) ? 0 : undefined}
       aria-label={text}
     >
       {children}

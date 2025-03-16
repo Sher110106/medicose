@@ -13,7 +13,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('speechSettings')
       return saved ? JSON.parse(saved) : {
-        enabled: false,
+        enabled: true, // Changed from false to true to enable voice assistance by default
         delay: 150,
         rate: 1,
         pitch: 1,
@@ -22,7 +22,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
       }
     }
     return {
-      enabled: false,
+      enabled: true, // Changed from false to true to enable voice assistance by default
       delay: 150,
       rate: 1,
       pitch: 1,

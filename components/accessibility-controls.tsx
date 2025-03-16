@@ -7,7 +7,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
-import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
 import { useElementSpeech } from "@/hooks/useElementSpeech"
 
@@ -35,7 +34,7 @@ export function AccessibilityControls({
   speechSettings,
   onSpeechSettingsChange,
 }: AccessibilityControlsProps) {
-  const { speakText, isSpeechSupported, hasUserInteracted } = useElementSpeech();
+  const { isSpeechSupported, hasUserInteracted } = useElementSpeech();
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [fontSize, setFontSize] = useState(2); // 1=small, 2=medium, 3=large
@@ -80,6 +79,12 @@ export function AccessibilityControls({
       window.speechSynthesis.speak(utterance);
     }
   };
+
+  // Format slider values for better screen reader announcements
+  const formatRateValue = (value: number) => `${value.toFixed(1)}x speed`;
+  const formatPitchValue = (value: number) => `${value.toFixed(1)}`;
+  const formatVolumeValue = (value: number) => `${Math.round(value * 100)}%`;
+  const formatDelayValue = (value: number) => `${value} milliseconds`;
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg overflow-hidden">
@@ -176,46 +181,58 @@ export function AccessibilityControls({
           {speechSettings.enabled && (
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label>Speech Rate</Label>
+                <Label htmlFor="speech-rate-slider">Speech Rate: {formatRateValue(speechSettings.rate)}</Label>
                 <Slider
+                  id="speech-rate-slider"
                   value={[speechSettings.rate]}
                   min={0.5}
                   max={2}
                   step={0.1}
                   onValueChange={([value]) => updateSpeechSetting("rate", value)}
+                  aria-label="Speech rate"
+                  aria-valuetext={formatRateValue(speechSettings.rate)}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Pitch</Label>
+                <Label htmlFor="speech-pitch-slider">Pitch: {formatPitchValue(speechSettings.pitch)}</Label>
                 <Slider
+                  id="speech-pitch-slider"
                   value={[speechSettings.pitch]}
                   min={0.5}
                   max={2}
                   step={0.1}
                   onValueChange={([value]) => updateSpeechSetting("pitch", value)}
+                  aria-label="Speech pitch"
+                  aria-valuetext={formatPitchValue(speechSettings.pitch)}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Volume</Label>
+                <Label htmlFor="speech-volume-slider">Volume: {formatVolumeValue(speechSettings.volume)}</Label>
                 <Slider
+                  id="speech-volume-slider"
                   value={[speechSettings.volume]}
                   min={0}
                   max={1}
                   step={0.1}
                   onValueChange={([value]) => updateSpeechSetting("volume", value)}
+                  aria-label="Speech volume"
+                  aria-valuetext={formatVolumeValue(speechSettings.volume)}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Hover Delay (ms)</Label>
+                <Label htmlFor="speech-delay-slider">Hover Delay: {formatDelayValue(speechSettings.delay)}</Label>
                 <Slider
+                  id="speech-delay-slider"
                   value={[speechSettings.delay]}
                   min={0}
                   max={500}
                   step={50}
                   onValueChange={([value]) => updateSpeechSetting("delay", value)}
+                  aria-label="Hover delay before speaking"
+                  aria-valuetext={formatDelayValue(speechSettings.delay)}
                 />
               </div>
 
@@ -225,6 +242,7 @@ export function AccessibilityControls({
                   <Select
                     value={speechSettings.selectedVoice}
                     onValueChange={(value) => updateSpeechSetting("selectedVoice", value)}
+                    aria-label="Select voice for speech"
                   >
                     <SelectValue placeholder="Select a voice" id="voice-select" />
                     <SelectContent>
@@ -243,12 +261,13 @@ export function AccessibilityControls({
                 onClick={testVoice} 
                 disabled={!speechSettings.enabled || !isSpeechSupported || !hasUserInteracted}
                 className="w-full"
+                aria-label="Test current voice settings"
               >
                 Test Voice Settings
               </Button>
 
               {!hasUserInteracted && (
-                <p className="text-sm text-yellow-600">
+                <p className="text-sm text-yellow-600" role="alert">
                   Please interact with the page (click/tap anywhere) to enable voice features.
                 </p>
               )}
