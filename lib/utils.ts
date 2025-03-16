@@ -70,24 +70,45 @@ export async function processImageWithNebius(imageData: string): Promise<Process
       }
     }
 
-    const response = await fetch('/api/process-image', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        imageData: `data:image/jpeg;base64,${base64Image}`
-      })
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-    const data = await response.json();
+    try {
+      const response = await fetch('/api/process-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageData: `data:image/jpeg;base64,${base64Image}`
+        }),
+        signal: controller.signal
+      });
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to process image');
+      clearTimeout(timeoutId);
+
+      let data;
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('Failed to parse response:', text);
+        throw new Error('Invalid response from server');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to process image');
+      }
+
+      return data;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out - please try again');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return data;
-
   } catch (error) {
     console.error('Error processing image:', error);
     return {
