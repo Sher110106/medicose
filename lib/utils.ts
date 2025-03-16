@@ -102,7 +102,7 @@ export async function processImageWithNebius(imageData: string): Promise<Process
 
       return data;
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
         throw new Error('Request timed out - please try again');
       }
       throw error;

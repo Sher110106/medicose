@@ -71,17 +71,17 @@ function isExpired(expiryDate: string | null): boolean {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   let timeoutId: NodeJS.Timeout | undefined;
   
   try {
-    const timeoutPromise = new Promise((_, reject) => {
+    const timeoutPromise: Promise<Response> = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
         reject(new Error('Processing timeout - please try with a smaller image or try again'));
       }, PROCESS_TIMEOUT);
     });
 
-    const processPromise = (async () => {
+    const processPromise: Promise<Response> = (async () => {
       try {
         const { imageData } = await request.json()
 
@@ -336,13 +336,13 @@ Return a JSON response with these fields:
     })();
 
     // Race between timeout and processing
-    const result = await Promise.race([processPromise, timeoutPromise]);
+    const result = await Promise.race<Response>([processPromise, timeoutPromise]);
     if (timeoutId) clearTimeout(timeoutId);
     return result;
 
   } catch (error) {
     console.error('API Error:', error);
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
     
     // Ensure we always return a valid JSON response
     return NextResponse.json({
