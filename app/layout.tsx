@@ -8,7 +8,7 @@ import { LayoutContent } from "@/components/layout-content"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Expiry Date Reader - Accessible Medicine Tracking",
+  title: "Medicose - Accessible Medicine Tracking",
   description: "An accessible application to help visually impaired users identify product expiration dates",
 }
 
