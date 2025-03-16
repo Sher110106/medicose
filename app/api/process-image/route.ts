@@ -99,7 +99,7 @@ export async function POST(request: Request): Promise<Response> {
         console.log('Starting comprehensive scan with vision model...');
         
         const visionResponse = await client.chat.completions.create({
-          model: 'Qwen/Qwen2-VL-72B-Instruct',  // Corrected model name
+          model: 'Qwen/Qwen2-VL-7B-Instruct',  // Corrected model name
           temperature: 0.2,
           messages: [
             {
@@ -205,7 +205,7 @@ If the expiry date is found, ensure it's clearly labeled.`
         let benefitsInfo: BenefitsInfo = {};
         try {
           const deepseekResponse = await client.chat.completions.create({
-            model: 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',  // Corrected model name
+            model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',  // Corrected model name
             temperature: 0.2,
             messages: [
               {
